@@ -1,0 +1,36 @@
+{
+  "data": [
+    {
+      "userEmail": "ad001013545@techmahindra.com",
+      "passWord": "Chand@sneha5",
+      "menuName": "Lingerie",
+      "subMenuName": "All Lingerie",
+      "sortBy": "Newest",
+      "productName": "Lia Polka Dot Longline Bra Black",
+      "email": "abcd@gmail.com",
+      "lastName": "Das",
+      "firstName": "Anubrata",
+      "postalCode": "181",
+      "phone": "+919732414967",
+      "phone_country_select": "IN",
+      "country": "Japan",
+      "postalSearchText": "Iguchi"
+    },
+    {
+      "userEmail": "ad001013545@techmahindra.com",
+      "passWord": "Chand@sneha5",
+      "menuName": "Bestseller",
+      "subMenuName": "Bestselling Sets",
+      "sortBy": "Price: Low to High",
+      "productName": "Noor Sheer Mesh Bodysuit Black",
+      "email": "testuser2@example.com",
+      "lastName": "Smith",
+      "firstName": "John",
+      "postalCode": "181",
+      "phone": "+919732414967",
+      "phone_country_select": "IN",
+      "country": "Japan",
+      "postalSearchText": "Iguchi"
+    }
+  ]
+}
