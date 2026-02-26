@@ -15,7 +15,8 @@ from utils.constants import (
     CHECKOUT_BUTTON,
     COMPLETE_THE_LOOK_SECTION,
     COMPLETE_THE_LOOK_ITEMS,
-    SIZE_OPTION_CLASS
+    SIZE_OPTION_CLASS,
+    COLOR_OPTION_CLASS
 )
 from utils.logger import get_logger
 from utils.helpers import scroll_to_element
@@ -41,6 +42,34 @@ class ProductPage(BasePage):
         self.checkout_button = (By.XPATH, CHECKOUT_BUTTON)
         self.complete_the_look_section = (By.XPATH, COMPLETE_THE_LOOK_SECTION)
         self.complete_the_look_items = (By.XPATH, COMPLETE_THE_LOOK_ITEMS)
+        
+    def select_color_option_if_available(self, color_name: str) -> bool:
+        """
+        Select a specific color option if available.
+        
+        Args:
+            color_name: Name of the color to select (e.g., "Red")
+        
+        Returns:
+            True if color option was selected, False otherwise
+        """
+        logger.info(f"Checking availability of color option: {color_name}")
+        color_locator = (
+            By.XPATH,
+            COLOR_OPTION_CLASS.replace("Red", color_name)
+        )
+        
+        if self.is_element_visible(color_locator, timeout=3):
+            try:
+                self.click_element(color_locator)
+                logger.info(f"Successfully selected color option: {color_name}")
+                return True
+            except Exception as e:
+                logger.warning(f"Color option '{color_name}' visible but not clickable: {e}")
+                return False
+        else:
+            logger.debug(f"Color option '{color_name}' is not available")
+            return False
     
     def select_size_if_available(self, size_text: str) -> bool:
         """

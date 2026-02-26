@@ -10,6 +10,8 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.firefox.service import Service as FirefoxService
+from selenium.webdriver.edge.options import Options as EdgeOptions
+from selenium.webdriver.edge.service import Service as EdgeService
 
 from config.config_manager import config
 from utils.logger import get_logger
@@ -33,8 +35,8 @@ def pytest_addoption(parser):
         "--browser_name",
         action="store",
         default=config.default_browser,
-        choices=["chrome", "firefox"],
-        help="Browser to use for testing (chrome, firefox)"
+        choices=["chrome", "firefox", "edge"],
+        help="Browser to use for testing (chrome, firefox, edge)"
     )
     parser.addoption(
         "--headless",
@@ -70,6 +72,8 @@ def browser_instance(request):
             driver = _create_chrome_driver(headless)
         elif browser_name == "firefox":
             driver = _create_firefox_driver(headless)
+        elif browser_name == "edge":
+            driver = _create_edge_driver(headless)
         else:
             raise ValueError(f"Unsupported browser: {browser_name}")
         
@@ -161,6 +165,45 @@ def _create_firefox_driver(headless: bool = False):
         return driver
     except Exception as e:
         logger.error(f"Failed to create Firefox driver: {e}")
+        raise
+
+
+def _create_edge_driver(headless: bool = False):
+    """
+    Create Edge WebDriver instance.
+    
+    Args:
+        headless: Whether to run in headless mode
+    
+    Returns:
+        Edge WebDriver instance
+    """
+    options = EdgeOptions()
+    
+    # Get Edge options from config
+    edge_options_str = config.get("Browser", "edge_options", "")
+    if edge_options_str:
+        for option in edge_options_str.split(","):
+            if option.strip():
+                options.add_argument(option.strip())
+    
+    if headless:
+        options.add_argument("--headless")
+        options.add_argument("--disable-gpu")
+        logger.debug("Edge running in headless mode")
+    
+    # Additional Edge options for stability
+    options.add_argument("--disable-extensions")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    
+    try:
+        driver = webdriver.Edge(options=options)
+        driver.maximize_window()
+        return driver
+    except Exception as e:
+        logger.error(f"Failed to create Edge driver: {e}")
         raise
 
 

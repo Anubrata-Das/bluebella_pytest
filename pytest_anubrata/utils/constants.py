@@ -40,6 +40,7 @@ CHECKOUT_BUTTON = "//div[@class='cart-drawer__footer--buttons']/a[@href='/checko
 COMPLETE_THE_LOOK_SECTION = "//div[@class='complete-the-look']//div[@class='owl-stage']"
 COMPLETE_THE_LOOK_ITEMS = "//div[@class='complete-the-look']//div[contains(@class,'owl-item')]"
 SIZE_OPTION_CLASS = "product-form__sizes--option"
+COLOR_OPTION_CLASS = "//a[contains(@class,'product-form__sizes--color')]//span[contains(text(),'Red')]/ancestor::a"
 
 # Checkout Page Locators
 CHECKOUT_EMAIL_INPUT = "//input[@id='email']"

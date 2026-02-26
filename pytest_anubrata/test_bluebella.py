@@ -102,9 +102,18 @@ def test_bluebella_e2e_shopping_flow(browser_instance, test_data):
         logger.info("Step 5: Adding products to cart")
         product_page = ProductPage(driver)
         
-        # Select sizes if available
-        product_page.select_size_if_available("38")
-        product_page.select_size_if_available("D")
+        # Select sizes if available (handles None/missing values gracefully)
+        first_size = test_data.get("firstOption")
+        second_size = test_data.get("secondOption")
+        color_option = test_data.get("colorOption")
+        
+        if color_option:
+            product_page.select_color_option_if_available(color_option)
+        if first_size:
+            product_page.select_size_if_available(first_size)
+        if second_size:
+            product_page.select_size_if_available(second_size)
+
         
         # Add first item and close drawer
         product_page.add_to_cart_and_close_drawer()
@@ -116,7 +125,9 @@ def test_bluebella_e2e_shopping_flow(browser_instance, test_data):
             logger.warning(f"Complete the Look section not available: {e}")
         
         # Quick add another size
-        product_page.select_quick_add_size_if_available("M")
+        third_size = test_data.get("quickAddOption")
+        if third_size:
+            product_page.select_quick_add_size_if_available(third_size)
         product_page.proceed_to_checkout()
         
         # Step 6: Fill checkout form

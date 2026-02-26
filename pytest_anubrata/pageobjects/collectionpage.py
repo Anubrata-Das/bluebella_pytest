@@ -2,6 +2,7 @@
 Collection Page Object Model.
 Handles all interactions with the product collection page.
 """
+import time
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.common.exceptions import (
@@ -52,10 +53,27 @@ class CollectionPage(BasePage):
             sort_option: Text of the sort option to select (e.g., "Newest", "Price: Low to High")
         """
         logger.info(f"Selecting sort option: {sort_option}")
-        sort_option_locator = (
-            By.XPATH,
-            f"(//div[contains(@class,'collection-filter__sorting')]//button[contains(normalize-space(.),'{sort_option}')])[1]"
-        )
+        
+        # Normalize the sort option - handle both comma and colon variations
+        # Also handle partial matching for "Price" options
+        if "price" in sort_option.lower() and "low" in sort_option.lower():
+            # Match any "Price ... Low to High" variation
+            sort_option_locator = (
+                By.XPATH,
+                "(//div[contains(@class,'collection-filter__sorting')]//button[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),'price') and contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),'low')])[1]"
+            )
+        elif "price" in sort_option.lower() and "high" in sort_option.lower():
+            # Match any "Price ... High to Low" variation
+            sort_option_locator = (
+                By.XPATH,
+                "(//div[contains(@class,'collection-filter__sorting')]//button[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),'price') and contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),'high')])[1]"
+            )
+        else:
+            # Default: use exact text match
+            sort_option_locator = (
+                By.XPATH,
+                f"(//div[contains(@class,'collection-filter__sorting')]//button[contains(normalize-space(.),'{sort_option}')])[1]"
+            )
         self.click_element(sort_option_locator)
     
     def sort_by_text(self, sort_text: str):
@@ -74,6 +92,8 @@ class CollectionPage(BasePage):
         self.select_sort_option(sort_text)
         # Wait for products to reload after sorting
         self.wait_utils.wait_for_elements_present(self.product_grid_items, min_count=1)
+        # Wait additional time for lazy content to load
+        time.sleep(2)
     
     def scroll_full_collection_page(self, max_scrolls: int = 50):
         """
@@ -111,7 +131,6 @@ class CollectionPage(BasePage):
     def find_product_by_name(self, product_name: str):
         """
         Find product element by name using incremental scrolling for lazy-loaded content.
-        Scrolls 400px at a time and checks if product is visible in viewport.
         
         Args:
             product_name: Exact product name to find
@@ -124,106 +143,127 @@ class CollectionPage(BasePage):
         """
         logger.info(f"Searching for product: {product_name} using incremental scrolling")
         
-        scroll_amount = 400  # pixels to scroll at a time
-        max_scrolls = 100  # Maximum number of scrolls to prevent infinite loop
-        scroll_position = 0
-        last_height = self.driver.execute_script("return document.body.scrollHeight")
+        max_scrolls = 100
+        previous_product_count = 0
+        no_new_products_count = 0
         
-        for scroll_count in range(max_scrolls):
-            # Get all currently loaded product elements
-            products = self.driver.find_elements(*self.product_grid_items)
-            
-            if not products:
-                logger.warning("No products found on page yet")
-                # Scroll a bit to trigger lazy loading
-                scroll_position += scroll_amount
-                self.driver.execute_script(f"window.scrollTo(0, {scroll_position});")
-                self.wait_utils.wait_for_element_present(
-                    self.product_grid_items,
-                    timeout=config.short_timeout
-                )
-                continue
-            
-            logger.debug(f"Checking {len(products)} products after scroll {scroll_count + 1}")
-            
-            # Check each product to see if it matches and is visible
-            for idx, product in enumerate(products):
+        # Store original implicit wait and disable it for faster element checks
+        original_implicit_wait = self.driver.timeouts.implicit_wait
+        self.driver.implicitly_wait(0)  # Disable implicit wait for faster iteration
+        
+        # Wait for product titles to be loaded (lazy rendering)
+        # Scroll down to middle of page to trigger lazy loading, then back up
+        self.driver.execute_script("window.scrollTo(0, 500);")
+        time.sleep(1)
+        self.driver.execute_script("window.scrollTo(0, 1000);")
+        time.sleep(1)
+        self.driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(2)
+        
+        # Wait for at least one product with a title to appear
+        title_xpath = f"//div[contains(@class,'product-grid-item-column')]//*[contains(@class,'{PRODUCT_TITLE_CLASS}')]"
+        try:
+            self.wait_utils.wait_for_element_present(
+                (By.XPATH, title_xpath),
+                timeout=15
+            )
+        except TimeoutException:
+            logger.warning("Timed out waiting for product titles to load")
+        
+        try:
+            for scroll_count in range(max_scrolls):
+                # Get all currently loaded product elements
+                products = self.driver.find_elements(*self.product_grid_items)
+                current_product_count = len(products)
+                
+                logger.debug(f"Scroll {scroll_count + 1}: Found {current_product_count} products")
+                
+                if not products:
+                    logger.warning("No products found on page yet")
+                    self.driver.execute_script("window.scrollBy(0, 500);")
+                    time.sleep(0.5)
+                    continue
+                
+                # Check each product to see if it matches
+                found_titles = []
+                for idx, product in enumerate(products):
+                    try:
+                        title_element = product.find_element(
+                            By.XPATH,
+                            f".//*[contains(@class,'{PRODUCT_TITLE_CLASS}')]"
+                        )
+                        title_text = title_element.text.strip()
+                        if title_text:
+                            found_titles.append(title_text)
+                        
+                        if title_text == product_name:
+                            logger.info(f"Found matching product '{product_name}' at index {idx}")
+                            scroll_to_element(self.driver, product)
+                            time.sleep(0.3)
+                            return product
+                        
+                    except (NoSuchElementException, StaleElementReferenceException):
+                        continue
+                
+                # Log found titles for debugging (first iteration only)
+                if scroll_count == 0:
+                    logger.info(f"First search found {len(found_titles)} titles. First 5: {found_titles[:5]}")
+                
+                # Product not found yet - scroll to last product to trigger lazy loading
+                last_product = products[-1]
                 try:
-                    # Get product title
+                    self.driver.execute_script(
+                        "arguments[0].scrollIntoView({block: 'end', behavior: 'instant'});",
+                        last_product
+                    )
+                    time.sleep(0.5)
+                except StaleElementReferenceException:
+                    logger.debug("Last product became stale, refetching products")
+                    continue
+                
+                # Check if new products loaded
+                new_products = self.driver.find_elements(*self.product_grid_items)
+                new_count = len(new_products)
+                
+                if new_count == previous_product_count:
+                    no_new_products_count += 1
+                    logger.debug(f"No new products loaded (attempt {no_new_products_count})")
+                    
+                    # Scroll more
+                    self.driver.execute_script("window.scrollBy(0, 500);")
+                    time.sleep(0.5)
+                    
+                    if no_new_products_count >= 5:
+                        logger.debug("No new products after multiple scroll attempts, reached end of page")
+                        break
+                else:
+                    no_new_products_count = 0
+                    previous_product_count = new_count
+            
+            # Final check: scroll back to top and check all products one more time
+            logger.debug("Performing final check by scrolling to top")
+            self.driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(0.5)
+            
+            products = self.driver.find_elements(*self.product_grid_items)
+            for product in products:
+                try:
                     title_element = product.find_element(
                         By.XPATH,
                         f".//*[contains(@class,'{PRODUCT_TITLE_CLASS}')]"
                     )
-                    title_text = title_element.text.strip()
-                    
-                    # If product name matches, scroll to it and return
-                    if title_text == product_name:
-                        logger.info(f"Found matching product '{product_name}'")
-                        # Scroll product into view to ensure it's fully loaded
+                    if title_element.text.strip() == product_name:
+                        logger.info(f"Found product '{product_name}' in final check")
                         scroll_to_element(self.driver, product)
-                        # Wait a moment for any lazy-loaded images/content
-                        self.wait_utils.wait_for_element_present(
-                            (By.XPATH, f".//*[contains(@class,'{PRODUCT_TITLE_CLASS}')]"),
-                            timeout=config.short_timeout
-                        )
                         return product
-                    
-                except (NoSuchElementException, StaleElementReferenceException) as e:
-                    # Product tile might not have title or became stale, continue
+                except (NoSuchElementException, StaleElementReferenceException):
                     continue
             
-            # Product not found in current loaded products, scroll down 400px to load more
-            scroll_position += scroll_amount
-            self.driver.execute_script(f"window.scrollTo(0, {scroll_position});")
-            
-            # Wait for lazy-loaded content to appear
-            try:
-                self.wait_utils.wait_for_elements_present(
-                    self.product_grid_items,
-                    min_count=len(products),  # Wait for at least same number of products
-                    timeout=config.short_timeout
-                )
-            except TimeoutException:
-                logger.debug("No new products loaded after scroll")
-            
-            # Check if we've reached the bottom
-            new_height = self.driver.execute_script("return document.body.scrollHeight")
-            current_scroll = self.driver.execute_script("return window.pageYOffset || window.scrollY || 0;")
-            
-            # If we're close to bottom (within 500px), we've likely loaded all products
-            if current_scroll + 500 >= new_height:
-                logger.debug(f"Reached bottom of page (scroll: {current_scroll}, height: {new_height})")
-                break
-            
-            # Update last_height if page grew
-            if new_height > last_height:
-                last_height = new_height
+            raise NoSuchElementException(f"Product '{product_name}' not found on collection page after scrolling")
         
-        # Final check: scroll back to top and check all products one more time
-        logger.debug("Performing final check by scrolling to top")
-        self.driver.execute_script("window.scrollTo(0, 0);")
-        # Wait for page to stabilize
-        self.wait_utils.wait_for_elements_present(
-            self.product_grid_items,
-            min_count=1,
-            timeout=config.short_timeout
-        )
-        
-        products = self.driver.find_elements(*self.product_grid_items)
-        for product in products:
-            try:
-                title_element = product.find_element(
-                    By.XPATH,
-                    f".//*[contains(@class,'{PRODUCT_TITLE_CLASS}')]"
-                )
-                if title_element.text.strip() == product_name:
-                    logger.info(f"Found product '{product_name}' in final check")
-                    scroll_to_element(self.driver, product)
-                    return product
-            except (NoSuchElementException, StaleElementReferenceException):
-                continue
-        
-        raise NoSuchElementException(f"Product '{product_name}' not found on collection page after scrolling")
+        finally:
+            # Restore original implicit wait
+            self.driver.implicitly_wait(original_implicit_wait)
     
     def find_and_click_product(self, product_name: str):
         """
